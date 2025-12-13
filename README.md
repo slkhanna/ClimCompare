@@ -9,7 +9,8 @@ ClimCompare is a data product from the Secure Water Future Grant that is a User 
 \
 **Dependencies:** Google Earth Engine Code Editor (https://code.earthengine.google.com/)  
 **Access UI:** TODO  
-**Access Script:** TODO
+**Access Script:** https://code.earthengine.google.com/?accept_repo=users/slkhanna4/prismvdaymet  
+A copy is provide in .txt format as well
 ## Utilization
 ### For UI
 The starting display of the UI is the annual total percipitation difference between Daymetv4 and PRISM of the western United States in the year 1980. In the bottom right there is panel with a slider that can be shifted to display a different year, and on top of it is another panel with which the desired climate comparison band can be chosen. On the right hand side is also a color bar signifiying the numerical values the colors correspond to. Additionally, clicking anywhere on the displayed image will pull up a time series graph on the bottom right of the display that shows how the current climate comparison band changed from 1980 to 2024.
