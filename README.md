@@ -14,8 +14,18 @@ ClimCompare is a data product from the Secure Water Future Grant that is a User 
 TODO  
 \
 **License:** Apache 2.0
-## Parameters
-TODO TABLE
+## Bands
+|Band Name|Band Label|Description|
+|---------|----------|-----------|
+|rtmin|Tmin (degC)|DaymetV4 minus PRISM mean annual minimum temperature in degrees Celcius|
+|rtmax|Tmax (degC)|DaymetV4 minus PRISM mean annual maximum temperature in degrees Celcius|
+|dd_tmin|Tmin Degree Day|DaymetV4 minus PRISM annual sum of minimum temperature in degree days|
+|dd_tmax|Tmax Degree Day|DaymetV4 minus PRISM annual sum of maximum temperature in degree days|
+|rprcp|Precip (mm)|DaymetV4 minus PRISM annual sum of precipitation in millimeters|
+|dif_tmin|Tmin ((Daymet - PRISM)/PRISM)|Difference ratio of DaymetV4 and PRISM mean annual minimum temperature|
+|dif_tmax|Tmax ((Daymet - PRISM)/PRISM)|Difference ratio of DaymetV4 and PRISM mean annual maximum temperature|
+|dif_prcp|Precip ((Daymet - PRISM)/PRISM)|Difference ratio of Daymet V4 and PRISM annual sum of precipitation|
+
 ## Data Sources
 ### PRISM
 **Metadata:**  
