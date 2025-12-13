@@ -10,7 +10,56 @@
  * 
  * Asset imports include western_us_bounds and composite comparison images from 1980 to 2024
  */
- 
+
+//Imports
+var western_us_bounds = ee.FeatureCollection("projects/ucmercedgeeproj/assets/western_us_bounds"),
+    img1980 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1980"),
+    img1981 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1981"),
+    img1982 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1982"),
+    img1983 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1983"),
+    img1984 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1984"),
+    img1985 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1985"),
+    img1986 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1986"),
+    img1987 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1987"),
+    img1988 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1988"),
+    img1989 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1989"),
+    img1990 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1990"),
+    img1991 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1991"),
+    img1992 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1992"),
+    img1993 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1993"),
+    img1994 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1994"),
+    img1995 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1995"),
+    img1996 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1996"),
+    img1997 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1997"),
+    img1998 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1998"),
+    img1999 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb1999"),
+    img2000 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2000"),
+    img2001 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2001"),
+    img2002 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2002"),
+    img2003 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2003"),
+    img2004 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2004"),
+    img2005 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2005"),
+    img2006 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2006"),
+    img2007 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2007"),
+    img2008 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2008"),
+    img2009 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2009"),
+    img2010 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2010"),
+    img2011 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2011"),
+    img2012 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2012"),
+    img2013 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2013"),
+    img2014 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2014"),
+    img2015 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2015"),
+    img2016 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2016"),
+    img2017 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2017"),
+    img2018 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2018"),
+    img2019 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2019"),
+    img2020 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2020"),
+    img2021 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2021"),
+    img2022 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2022"),
+    img2023 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2023"),
+    img2024 = ee.Image("projects/ucmercedgeeproj/assets/DaymetvPRISM_comb2024");
+
+
  /*** 
  * Methodology:
  * (1)  PRISM monthly and DaymetV4 daily climate datasets are downloaded and filtered
@@ -42,7 +91,6 @@
  *  (4) finer_rawview: The UI runs using the realtime calculated PRISM and Daymet annual
  *                  comparison images while keeping Daymet's higher spatial resolution
  */
-
 
 //Modes
 var assetcreate = false;
