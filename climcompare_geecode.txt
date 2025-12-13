@@ -1,0 +1,619 @@
+/***
+ * ClimCompare
+ * 
+ * User Interface Comparing PRISM Monthly and DaymetV4 Daily Climate Datasets
+ * Author: Shobha Khanna (skhanna4@ucmerced.edu)
+ * Last Update: 2025-12-12
+ * 
+ * This work is supported by Agriculture and Food Research Initiative Competitive 
+ * Grant no. 2021-69012-35916 from the USDA National Institute of Food and Agriculture.  
+ * 
+ * Asset imports include western_us_bounds and composite comparison images from 1980 to 2024
+ */
+ 
+ /*** 
+ * Methodology:
+ * (1)  PRISM monthly and DaymetV4 daily climate datasets are downloaded and filtered
+ *          (a) Images from the period Jan 1980 to Dec 2022 are selected (can be expanded to include more years)
+ *          (b) Both datasets are clipped to western_us_bounds
+ *          (c) Bands for percipitation, max temperature & min temperature are selected for analysis
+ *          (d) Projections and Transformations for both datasets are calculated
+ *              (i) Daymet dataset is reprojected into PRISM's projection
+ * (2)  Raw values of the chosen bands are compared between Daymet & PRISM
+ *          (a) Annual mean composites of min and max temperatures are compared between the datasets
+ *          (b) Annual sum composites for precipitation are compared between the datasets
+ * (3)  Difference Ratio ((Daymet -PRISM)/PRISM) of the chosen bands are compared between Daymet & PRISM
+ *          (a) Annual mean composites of min and max temperatures are compared between the datasets
+ *          (b) Annual sum composites for precipitation are compared between the datasets
+ * (4)  Degree Day difference of min and max temperature are compared between Daymet & PRISM
+ *          (a) PRISM average monthly values of min and max temperature are transformed into a monthly degree sum
+ *          (b) Annual min and max degree sums are compared between the datasets
+ * (5)  UI is created
+ * /
+
+/***
+ * Modes
+ *  (1) assetcreate: Runs a loop to export the produced PRISM and Daymet annual
+ *                  comparison images to a google earth engine asset.
+ *  (2) assetview (DEFAULT): The UI runs using the imported PRISM and Daymet annual
+ *                  comparison image assets.
+ *  (3) rawview: The UI runs using the realtime calculated PRISM and Daymet annual
+ *                  comparison images.
+ *  (4) finer_rawview: The UI runs using the realtime calculated PRISM and Daymet annual
+ *                  comparison images while keeping Daymet's higher spatial resolution
+ */
+
+
+//Modes
+var assetcreate = false;
+var assetview = true;
+var rawview = false; //whole sceen cannot be rendered, must be zoom in to view
+var finer_rawview = false; //whole sceen cannot be rendered, must be zoom in to view
+
+//Globals
+var glo_start = '1980-01-01';
+var glo_end =  '2025-01-01'; //must change to increase years considered
+var numyrs = 45; //must change to increase years considered
+
+if (rawview || assetcreate || finer_rawview){
+  /* (1) DOWNLOAD & FILTER DATASETS PRISM & DAYMET */
+  //download DaymetV4 daily dataset
+  var daymet_daily = ee.ImageCollection('NASA/ORNL/DAYMET_V4')
+    //filter dataset to get Daymet images from Jan 1980 to Dec 2024
+    .filterDate(glo_start, glo_end)
+    //clip filtered dataset to extract data only within the western_us_bounds
+    .map(function(image){return image.clip(western_us_bounds)})
+    //select bands for percipitation, max temperature and minimum temperature
+    .select(['prcp', 'tmax', 'tmin']);
+
+
+  //download PRISM monthly dataset
+  var prism_monthly = ee.ImageCollection('OREGONSTATE/PRISM/ANm')
+    //filter dataset to get PRISM images from Jan 1980 to Dec 2024
+    .filterDate(glo_start, glo_end)
+    //clip filtered dataset to extract data only within the western_us_bounds
+    .map(function(image){return image.clip(western_us_bounds)})
+    //select bands for percipitation, max temperature and minimum temperature
+    .select(['ppt', 'tmax', 'tmin']);
+
+  //Get Prism Projection and Transformation
+  var pris = prism_monthly.first();
+  //print(pris.projection().nominalScale()) // 4638 meters
+  var prism_proj = pris.projection();
+  var prism_trans = [0.04166666666667, 0, -125.02083333333333,0, -0.04166666666667, 49.93750000000203];
+
+  //Get Daymet Projection and Transformation
+  var day = daymet_daily.first();
+  //print(day.projection().nominalScale()) // 1000 meters
+  var daymet_proj = day.projection();
+  var daymet_trans = [1000,0,-5802750,0,-1000,4984500];
+
+  //create reprojection variable
+  var trans = -1; //initialize to random value
+  var scale = -1;
+  if (rawview || assetcreate){
+    trans = prism_trans;
+    scale = null;
+  }
+  if (finer_rawview){
+    trans = null;
+    scale = 1000;
+  }
+
+  //Reproject Daymet into PRISM Projection
+  //NOTE: median and mean Reducer give different results
+  var daymet_reproj = daymet_daily.map(function(image){
+    return image.reduceResolution({
+      reducer: ee.Reducer.median(),  //can be ee.Reducer.mean()
+      maxPixels: 25 //at most 25 Daymet pixels within one PRISM pixel
+      }).reproject(prism_proj, trans, scale); //reproject daymet into PRISM projection
+  });
+  
+  
+  
+  /* (2) COMPARING RAW BAND VALUE DIFFERNCES BETWEEN PRISM & DAYMET */
+
+  /* Calculating Image Collection DaymetvPRISM_temp
+  * (1) For each year the function
+  * (2) compiles annual mean composites for "tmin" and "tmax" for Daymet
+  * (3) compiles annual mean composites for "tmin" and "tmax" for PRISM
+  * (4) returns for each year an image that contains the annual mean
+  *           composite difference between Daymet & PRISM (Daymet - PRISM)
+  */
+  var DaymetvPRISM_temp = ee.ImageCollection.fromImages(ee.List.sequence(0, (numyrs-1)).map(function(n) {
+    //Creates an iteration over all years
+    var start = ee.Date(glo_start).advance(n, 'year'); //starting date
+    var end = start.advance(1, 'year'); //yearly iteration
+  
+    //DaymetV4 tmin & tmax mean composite
+    var daymet_temp = daymet_reproj
+      .filterDate(start, end)
+      .select(['tmin','tmax'])
+      .mean()
+      .set('system:time_start', start.millis());
+
+    //PRISM tmin & tmax mean compoiste
+    var prism_temp = prism_monthly
+      .filterDate(start, end)
+      .select(['tmin','tmax'])
+      .mean()
+      .set('system:time_start', start.millis());
+    
+    //Difference = Daymet - PRISM
+    var comp_temp = daymet_temp
+      .subtract(prism_temp)
+      .set('system:time_start', start.millis())
+    
+    return comp_temp;
+  }));
+
+  
+  /* Calculating Image Collection DaymetvPRISM_precip
+  * (1) For each year the function
+  * (2) compiles annual sum composites for "prcp" for Daymet
+  * (3) compiles annual sum composites for "ppt" for PRISM
+  * (4) returns for each year an image that contains the annual sum
+  *           composite difference between Daymet & PRISM (Daymet - PRISM)
+  */
+  var DaymetvPRISM_precip = ee.ImageCollection.fromImages(ee.List.sequence(0, (numyrs-1)).map(function(n) {
+  //Creates an iteration over all years
+    var start = ee.Date(glo_start).advance(n, 'year');
+    var end = start.advance(1, 'year');
+
+    //DaymetV4 precipitation sum composite
+    var daymet_precip = daymet_reproj
+      .filterDate(start, end)
+      .select(['prcp'])
+      .sum()
+      .set('system:time_start', start.millis());
+
+    //PRISM precipitation sum compoiste
+    var prism_precip = prism_monthly
+      .filterDate(start, end)
+      .select(['ppt'])
+      .sum()
+      .set('system:time_start', start.millis());
+
+    //Difference = Daymet - PRISM
+    var comp_precip = daymet_precip
+      .subtract(prism_precip)
+      .set('system:time_start', start.millis())
+    
+    return comp_precip;
+  }));
+
+  /* (3) DIFFERENCE RATIO BETWEEN PRISM & DAYMET FOR EACH BAND */
+
+  /* Calculating Image Collection DaymetvPRISM_perdiff_temp
+  * (1) For each year the function
+  * (2) compiles annual mean composites for "tmin" and "tmax" for Daymet
+  * (3) compiles annual mean composites for "tmin" and "tmax" for PRISM
+  * (4) returns for each year an image that contains the annual mean
+  *           composite difference ratio between Daymet & PRISM ((Daymet - PRISM)/PRISM)
+  */
+  var DaymetvPRISM_perdiff_temp = ee.ImageCollection.fromImages(ee.List.sequence(0, (numyrs-1)).map(function(n) {
+  //Creates an iteration over all years
+    var start = ee.Date(glo_start).advance(n, 'year'); //starting date
+    var end = start.advance(1, 'year'); //yearly iteration
+
+    //DaymetV4 tmin & tmax mean composite
+    var daymet_temp = daymet_reproj
+        .filterDate(start, end)
+        .select(['tmin','tmax'])
+        .mean()
+        .set('system:time_start', start.millis());
+
+    //PRISM tmin & tmax mean compoiste
+    var prism_temp = prism_monthly
+      .filterDate(start, end)
+      .select(['tmin','tmax'])
+      .mean()
+      .set('system:time_start', start.millis());
+
+    //Difference Ratio = (Daymet - PRISM) / PRISM
+    var comp_temp = daymet_temp
+      .subtract(prism_temp)
+      .set('system:time_start', start.millis());
+    var perdiff_temp = comp_temp
+      .divide(prism_temp)
+      .set('system:time_start', start.millis());
+      
+    return perdiff_temp
+  }));
+
+
+
+  /* Calculating Image Collection DaymetvPRISM_perdiff_precip
+  * (1) For each year the function
+  * (2) compiles annual sum composites for "prcp" Daymet
+  * (3) compiles annual sum composites for "ppt" PRISM
+  * (4) returns for each year an image that contains the annual sum
+  *           composite difference ratio between Daymet & PRISM ((Daymet - PRISM)/PRISM)
+  */
+  var DaymetvPRISM_perdiff_precip = ee.ImageCollection.fromImages(ee.List.sequence(0, (numyrs-1)).map(function(n) {
+  //Creates an iteration over all years
+    var start = ee.Date(glo_start).advance(n, 'year');
+    var end = start.advance(1, 'year');
+
+    //DaymetV4 precipitation sum composite
+    var daymet_precip = daymet_reproj
+      .filterDate(start, end)
+      .select(['prcp'])
+      .sum()
+      .set('system:time_start', start.millis());
+
+    //PRISM precipitation sum compoiste
+    var prism_precip = prism_monthly
+      .filterDate(start, end)
+      .select(['ppt'])
+      .sum()
+      .set('system:time_start', start.millis());
+
+    //Difference Ratio - (Daymet - PRISM) / PRISM
+    var comp_precip = daymet_precip
+      .subtract(prism_precip)
+      .set('system:time_start', start.millis());
+    var perdiff_precip = comp_precip
+      .divide(prism_precip)
+      .set('system:time_start', start.millis());
+    
+    return perdiff_precip
+  }));
+
+
+
+
+  /* (4) COMPARING DAYMET AND PRISM DIFFERENCES IN TMIN AND TMAX DEGREE DAYS */
+
+  var reg = ee.List([31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+  var leap = ee.List([31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]);
+  var multimonth = ee.List([]);
+  //create a list of elements that have the number of days for each month from Jan 1980 to Dec 2022
+  for (var yr=1980; yr<2025; yr++) {//leap years: 1980, 1984, 1988, 1992, 1996, 2000, 2004, 2008, 2012, 2016, 2020, 2024
+    if (yr == 1980 || yr == 1984 || yr == 1988 || yr == 1992 ||
+    yr == 1996 || yr == 2000 || yr == 2004 || yr == 2008 || yr == 2012 ||
+    yr == 2016 || yr == 2020 || yr == 2024){
+      multimonth = multimonth.cat(leap);
+    }
+    else{//non-leap years
+      multimonth = multimonth.cat(reg);
+    }
+  }
+  
+  //multiply each month in @prism_monthly by number of days in that month using @multimonth
+  var prismdaily = ee.ImageCollection.fromImages(ee.List.sequence(0,539).map(function(n) {
+  //Creates an iteration from 1 to 42 to account for all years from 1980-2022 (must change if analyzing more years)
+    var start = ee.Date(glo_start).advance(n, 'month');
+    var end = start.advance(1, 'month');
+    
+    //get prism image for given month
+    var img = prism_monthly
+      .filterDate(start, end)
+      .select(['tmin', 'tmax'])
+      .first();
+    
+    //create constant image based on number of days in given month
+    var tomult = ee.Image(ee.Number(multimonth.get(n)));
+
+    //multiply prism image by constant number of days in month image
+    return img.multiply(tomult).set('system:time_start', start.millis());
+  }));
+
+  /* Calculating Image Collection DaymetvPRISM_degday
+  * (1) For each year the function
+  * (2) compiles annual sum composites for "tmin" and "tmax" for Daymet
+  * (3) compiles annual sum composites for "tmin" and "tmax" for PRISM
+  * (4) returns for each year an image that contains the annual sum
+  *           composite difference between Daymet & PRISM (Daymet - PRISM)
+  */
+  var DaymetvPRISM_degday = ee.ImageCollection.fromImages(ee.List.sequence(0, (numyrs-1)).map(function(n) {
+  //Creates an iteration over all years
+    var start = ee.Date(glo_start).advance(n, 'year'); //starting date
+    var end = start.advance(1, 'year'); //yearly iteration
+
+    //DaymetV4 tmin & tmax mean composite
+    var daymet_temp = daymet_reproj
+      .filterDate(start, end)
+      .select(['tmin','tmax'])
+      .sum()
+      .set('system:time_start', start.millis());
+
+    //PRISM tmin & tmax mean compoiste
+    var prism_temp = prismdaily
+      .filterDate(start, end)
+      .select(['tmin','tmax'])
+      .sum()
+      .set('system:time_start', start.millis());
+
+    //Difference = Daymet - PRISM
+    var comp_temp = daymet_temp
+      .subtract(prism_temp)
+      .set('system:time_start', start.millis());
+    
+    return comp_temp;
+  }));
+  
+}
+
+
+
+
+if (assetcreate || rawview || finer_rawview) {
+  
+  //combine all composite image collections into single image collection with 8 bands
+  //Image Collections to combine:
+  //DaymetvPRISM_temp, DaymetvPRISM_precip
+  //DaymetvPRISM_perdiff_temp, DaymetvPRISM_perdiff_precip
+  //DaymetvPRISM_degday
+  var DaymetvPRISM_comb = ee.ImageCollection.fromImages(ee.List.sequence(0, (numyrs-1)).map(function(n) {
+  //Creates an iteration over all years
+    var start = ee.Date(glo_start).advance(n, 'year'); //starting date
+    var end = start.advance(1, 'year'); //yearly iteration
+    //get each image
+    var raw_temp = DaymetvPRISM_temp
+      .filterDate(start, end)
+      .first();
+    var raw_prcp = DaymetvPRISM_precip
+      .filterDate(start, end)
+      .first();
+    var dif_temp = DaymetvPRISM_perdiff_temp
+      .filterDate(start, end)
+      .first();
+    var dif_prcp = DaymetvPRISM_perdiff_precip
+      .filterDate(start, end)
+      .first();
+    var dd_temp = DaymetvPRISM_degday
+      .filterDate(start, end)
+      .first();
+  
+    //combine all bands in one image
+    var comb1 = raw_temp.addBands(raw_prcp);
+    var comb2 = comb1.addBands(dif_temp);
+    var comb3 = comb2.addBands(dif_prcp);
+    var comb4 = comb3.addBands(dd_temp).set('system:time_start', start.millis())
+    
+    
+    //rename bands
+    var newnames = ee.List(['rtmin','rtmax','rprcp','dif_tmin','dif_tmax','dif_prcp','dd_tmin','dd_tmax']);
+    comb4 = comb4.rename(newnames);
+    
+    return comb4;
+  }));
+
+  if (assetcreate){
+    //export image to asset
+    for (var yr = 0; yr < numyrs; yr++){
+      var start = ee.Date(glo_start).advance(yr, 'year'); //starting date
+      var end = start.advance(1, 'year'); //yearly iteration
+      var yr_str = (yr + 1980).toString();
+      var name = 'DaymetvPRISM_comb'+ yr_str;
+      print(name); //for verification
+      Export.image.toAsset({
+        image: DaymetvPRISM_comb.filterDate(start, end).first(),
+        description: name,
+        assetId: name,
+        crs: 'EPSG:4269', //specific crs for NAD83
+        crsTransform: prism_trans,
+        region: western_us_bounds,
+        pyramidingPolicy: {'.default': 'sample'}
+      });
+    }
+  }
+}
+
+
+
+if(assetview || rawview || finer_rawview){
+
+  /* (5) UI DISPLAY */
+  /*SET UP UI*/
+  /***
+   * Avialable Models:
+  *    Raw Differnce: "Tmin (degC)", "Tmax (degC)", "Precip (mm)"
+  *    Difference Ratio: "Tmin ((Daymet - PRISM)/PRISM)", "Tmax ((Daymet - PRISM)/PRISM)", "Precip ((Daymet - PRISM)/PRISM)"
+  *    Degree Day: "Tmin Degree Day", "Tmax Degree Day"
+  */
+  var available_models = ["Tmin (degC)", "Tmax (degC)", "Precip (mm)",
+        "Tmin ((Daymet - PRISM)/PRISM)", "Tmax ((Daymet - PRISM)/PRISM)", "Precip ((Daymet - PRISM)/PRISM)",
+        "Tmin Degree Day","Tmax Degree Day"];
+  if (assetview){
+    //combine all assets into an image collection to use in the UI
+    var DaymetvPRISM_comb = ee.ImageCollection.fromImages([img1980, img1981, img1982,
+    img1983, img1984, img1985, img1986, img1987, img1988, img1989, img1990,
+    img1991, img1992, img1993, img1994, img1995, img1996, img1997, img1998,
+    img1999, img2000, img2001, img2002, img2003, img2004, img2005, img2006,
+    img2007, img2008, img2009, img2010, img2011, img2012, img2013, img2014,
+    img2015, img2016, img2017, img2018, img2019, img2020, img2021, img2022,
+    img2023, img2024]);
+  }
+  // Associate model name to corresponding image collection with correct band
+  var models = {"Tmin (degC)": DaymetvPRISM_comb.select('rtmin'),
+    "Tmax (degC)": DaymetvPRISM_comb.select('rtmax'),
+    "Tmin Degree Day":  DaymetvPRISM_comb.select('dd_tmin'),
+    "Tmax Degree Day":  DaymetvPRISM_comb.select('dd_tmax'),
+    "Precip (mm)": DaymetvPRISM_comb.select('rprcp'),
+    "Tmin ((Daymet - PRISM)/PRISM)": DaymetvPRISM_comb.select('dif_tmin'),
+    "Tmax ((Daymet - PRISM)/PRISM)": DaymetvPRISM_comb.select('dif_tmax'),
+    "Precip ((Daymet - PRISM)/PRISM)": DaymetvPRISM_comb.select('dif_prcp')
+  };
+
+
+  //Default setting of UI
+  var CURRENT_YEAR = 1980;
+  var CURRENT_MODEL = "Precip (mm)";
+  var CHART = null;
+  var ischart = false;
+
+  // define the UI elements that give people controls
+  // low value, high value, starting value, increment, callback function
+  var year_slider = ui.Slider(1980, 2024, CURRENT_YEAR, 1, update_year);
+  // list of strings to select, value if nothing is selected - we set that to an empty string, because
+  // we provide the third value, which is the default to use, then set the callback
+  var model_select = ui.Select(available_models, "", CURRENT_MODEL, update_model);
+  //set up of ui panel, buttons + location on screen
+  var PANEL = ui.Panel(
+    [model_select, year_slider]
+  );
+  PANEL.style().set({position: "bottom-right"});
+
+
+  //PALETTES
+  //"Precip (mm)" palette set at about 2 standard deviations away
+  var palette = {min:-240,max:240,palette:['blue','white','red']};
+
+  //"Tmin (deg C)" and "Tmax (deg C)" palette set to between 2 to 3 standard deviations away
+  var tpalette = {min:-2.5, max: 2.5, palette:['blue','white','red']};
+
+  //Difference Ratio Palettes set as min = -1  and max = 1
+  var perdiff_palette = {min:-1, max: 1, palette:['blue','white','red']};
+
+  //"Tmin Degree Day" and "Tmax Degree Day" palette set to between 2 to 3 standard deviations away
+  var degday_palette = {min:-750, max: 750, palette:['blue','white','red']};
+
+  var PALETTE = palette;
+
+
+
+
+  /*RUN UI*/
+  // our simple render "loop" - get the image we want by choosing the image collection, filtering it by time
+  function rerender(){
+    var image = models[CURRENT_MODEL].filter(ee.Filter.calendarRange(CURRENT_YEAR, CURRENT_YEAR, 'year'));
+    print(image);  // for verification
+    Map.clear();  // remove everything from the map
+  
+    //choose correct color palette
+    if(CURRENT_MODEL == "Precip (mm)") { PALETTE = palette}
+    else if(CURRENT_MODEL == "Tmin (degC)" || CURRENT_MODEL == "Tmax (degC)"){PALETTE = tpalette}
+    else if(CURRENT_MODEL == "Tmin test" || CURRENT_MODEL == "Tmax test") {PALETTE = tpalette}
+    else if(CURRENT_MODEL == "Tmin Degree Day" || CURRENT_MODEL == "Tmax Degree Day" ) {PALETTE = degday_palette}
+    else {PALETTE = perdiff_palette}
+  
+    //add image layer
+    Map.addLayer(image, PALETTE, CURRENT_MODEL + "-" + CURRENT_YEAR);
+    //add panel
+    Map.add(PANEL);
+    //allow clicking on map
+    Map.onClick(click_map);
+ 
+    //COLOR BAR
+    //create a panel for color bar
+    var legend = ui.Panel({
+      style: {position: 'bottom-right',padding: '8px 15px'}
+    });
+    //text on top of color bar is max
+    var max = ui.Panel({
+      widgets: [ ui.Label(PALETTE['max'])],
+    });
+    legend.add(max);
+    //create color bar gradient
+    var lon = ee.Image.pixelLonLat().select('latitude');
+    var gradient = lon.multiply((PALETTE.max-PALETTE.min)/100.0).add(PALETTE.min);
+    var legendImage = gradient.visualize(PALETTE);
+    //create thumbnail to attach color bar gradient
+    var thumbnail = ui.Thumbnail({
+      image: legendImage,
+      params: {bbox:'0,0,10,100', dimensions:'10x200'},
+      style: {padding: '1px', position: 'bottom-right'}
+    });
+    legend.add(thumbnail);
+    //text on bottom of legend is min
+    var min = ui.Panel({
+      widgets: [ui.Label(PALETTE['min'])],
+    });
+    legend.add(min);
+    //add color bar to map
+    Map.add(legend);
+
+  }
+
+  /*
+  The next two functions are callbacks triggered when widgets in the panel are changed.
+  We basically just save the new value it provides back to our global, then 
+  refire our rendering code - Nick Santos
+  */
+
+  function update_year(year, widget){
+    CURRENT_YEAR = year;
+    rerender(); 
+  }
+
+  function update_model(model, widget){
+    CURRENT_MODEL = model;
+    rerender();
+  }
+
+  //Function plots point on layer, creates and displays timeseries 
+  function plot_point(point){
+    print(point);
+    Map.addLayer({eeObject:point, visParams: {color: "000000"}});
+    
+    if (ischart) {Map.remove(CHART)}
+    
+    // create timeseries of point
+    CHART = ui.Chart.image.series({
+      imageCollection: models[CURRENT_MODEL],
+      region: ee.FeatureCollection([point]),
+      reducer: ee.Reducer.mean(),
+      scale: 10 //Can be changed
+    });
+    //style of chart
+    var chartStyle = {
+      title: 'DaymetV4 Minus PRISM: '+ CURRENT_MODEL,
+      hAxis: {
+        title: 'Year',
+        titleTextStyle: {italic: false, bold: true},
+        gridlines: {color: '000000'}
+      },
+      vAxis: {
+        title: CURRENT_MODEL,
+        titleTextStyle: {italic: false, bold: true},
+        gridlines: {color: '000000'},
+        format: 'short',
+        baselineColor: '000000'
+      },
+      chartArea: {backgroundColor: 'FFFFFF'}
+    };
+    CHART.setOptions(chartStyle);
+    
+    // add chart to display
+    CHART.style().set({
+      position: 'bottom-left',
+      width: '300px',
+      height: '150px'
+    });
+    Map.add(CHART)
+    CHART.setDownloadable(true);
+    
+    if (ischart == false) {ischart = true;}
+  }
+
+  //Function returns coordinates of point under mouse click
+  function get_point(coords, map) {
+    var point = ee.Feature(ee.Algorithms.GeometryConstructors.Point([coords.lon, coords.lat])); // get coordinates of point
+    return point; //return point
+  }
+
+  //Function gets point under mouse click and plots it on layer
+  function click_map(coords, map){
+    var point = get_point(coords); // call function get point location under click
+    plot_point(point); // call function to plot point and run timeseries
+  }
+
+  rerender();//display the default or updated image
+
+}
+
+
+/* DATA RESOURCES */
+//Daly, C., J.I. Smith, and K.V. Olson. 2015. Mapping atmospheric moisture climatologies across the conterminous United States. PloS ONE 10(10):e0141140. doi:10.1371/journal.pone.0141140.
+//Daly, C., Halbleib, M., Smith, J.I., Gibson, W.P., Doggett, M.K., Taylor, G.H., Curtis, J., and Pasteris, P.A. 2008. Physiographically-sensitive mapping of temperature and precipitation across the conterminous United States. International Journal of Climatology, 28: 2031-2064
+//Thornton, M.M., R. Shrestha, Y. Wei, P.E. Thornton, S-C. Kao, and B.E. Wilson. 2022. Daymet: Daily Surface Weather Data on a 1-km Grid for North America, Version 4 R1. ORNL DAAC, Oak Ridge, Tennessee, USA. https://doi.org/10.3334/ORNLDAAC/2129
+//Thornton, M.M., R. Shrestha, Y. Wei, P.E. Thornton, S. Kao, and B.E. Wilson. 2020. Daymet: Daily Surface Weather Data on a 1-km Grid for North America, Version 4. ORNL DAAC, Oak Ridge, Tennessee, USA. doi:10.3334/ORNLDAAC/1840
+
+/* CODE RESOURCES */
+// Nick Santos' Basic UI Code https://code.earthengine.google.com/457de311353ed8a9b368b0895672baaf
+//https://gis.stackexchange.com/questions/359273/compare-image-in-imagecollection-with-another-image-gee
+//https://stackoverflow.com/questions/61220828/how-to-clip-an-image-collection-to-a-feature-collections-geometry
+//https://developers.google.com/earth-engine/guides/charts_style
+//https://gis.stackexchange.com/questions/422128/creating-a-vertical-color-bar-in-google-earth-engine
