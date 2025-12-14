@@ -3,6 +3,7 @@ Google Earth Engine User Interface Comparing PRISM Monthly and DaymetV4 Daily Cl
 \
 **Author:** Shobha L Khanna (skhanna4@ucmerced.edu)  
 **Last Updated:** 12th Dec 2025
+**DOI:** https://doi.org/10.5281/zenodo.17932100
 ## Description
 ClimCompare is a data product from the Secure Water Future Grant that is a User Interface (UI) created using Google Earth Engine. ClimCompare compares the two prominent climate datasets for the western United States: the DaymetV4 daily climate dataset produced by NASA and the PRISM monthly climate dataset produced by Oregon State University. The ClimCompare UI allows you to see spatially where the Daymet model estimates higher(red), lower(blue) or similar(white) values of temperature or precipitation compared to PRISM. Differences in Daymet and PRISM values for annual average minimum temperature, annual average maximum temperature and annual total precipitation can be visualized. Additional visualizations include the difference in Daymet and PRISM values as a ratio of the PRISM values, for annual average minimum temperature, annual average maximum temperature and annual total precipitation. Lastly, differences in Daymet and PRISM values for minimum temperature degree days and maximum temperature degree days are also provided. All Daymet and PRISM comparisons were calculated for each year from 1980 to 2024, and clicking anywhere on the map will pull up a time-series of how the Daymet and PRISM comparison changed at the clicked location over time.  
 \
